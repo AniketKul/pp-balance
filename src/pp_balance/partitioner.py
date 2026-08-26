@@ -99,3 +99,19 @@ def balance(
         worst_m = max(worst_m, sum(mems[idx:idx + n]))
         idx += n
     return Partition(counts, worst_t, worst_m, False)
+
+
+def evaluate_split(
+    counts: list[int], costs: list[float], mems: list[int]
+) -> Partition:
+    """Score a given per-stage element count against a cost/memory vector."""
+    if sum(counts) != len(costs):
+        raise ValueError(
+            f"counts sum to {sum(counts)} but there are {len(costs)} elements"
+        )
+    idx, worst_t, worst_m = 0, 0.0, 0
+    for n in counts:
+        worst_t = max(worst_t, sum(costs[idx:idx + n]))
+        worst_m = max(worst_m, sum(mems[idx:idx + n]))
+        idx += n
+    return Partition(list(counts), worst_t, worst_m, False)

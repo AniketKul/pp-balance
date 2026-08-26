@@ -1,5 +1,5 @@
 import pytest
-from pp_balance.partitioner import balance, cut_points, even_split, feasible
+from pp_balance.partitioner import balance, cut_points, evaluate_split, even_split, feasible
 
 def test_even_split_matches_vllm_for_nemotron_h_pp8():
     # 52 layers, pp_size=8: upstream nudges the remainder toward middle ranks
@@ -106,3 +106,14 @@ def test_balance_reports_memory_infeasible_instead_of_returning_hi():
 def test_cut_points_reconstructs_partition_for_a_budget():
     costs = [1.0, 2.0, 3.0, 4.0, 5.0]
     assert cut_points(9.0, costs, [0] * 5, mem_cap=INF) == [3, 2]
+
+def test_evaluate_split_reports_worst_stage():
+    costs = [1.0, 2.0, 3.0, 4.0]
+    mems = [5, 5, 5, 5]
+    got = evaluate_split([2, 2], costs, mems)
+    assert got.max_stage_cost == pytest.approx(7.0)  # [1,2]=3, [3,4]=7
+    assert got.max_stage_bytes == 10
+
+def test_evaluate_split_rejects_wrong_total():
+    with pytest.raises(ValueError):
+        evaluate_split([2, 1], [1.0, 2.0, 3.0, 4.0], [0, 0, 0, 0])
