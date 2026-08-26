@@ -42,3 +42,60 @@ def feasible(
         else:
             acc_t, acc_m = acc_t + c, acc_m + b
     return True
+
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Partition:
+    """Result of a partitioning attempt."""
+    partition: list[int] = field(default_factory=list)  # layers per stage
+    max_stage_cost: float = float("inf")
+    max_stage_bytes: int = 0
+    memory_infeasible: bool = False
+
+
+def cut_points(
+    x: float, costs: list[float], mems: list[int], mem_cap: float
+) -> list[int]:
+    """Greedily cut for budget x, returning the element count per stage."""
+    counts, acc_t, acc_m, n = [], 0.0, 0, 0
+    for c, b in zip(costs, mems):
+        if n and (acc_t + c > x or acc_m + b > mem_cap):
+            counts.append(n)
+            acc_t, acc_m, n = c, b, 1
+        else:
+            acc_t, acc_m, n = acc_t + c, acc_m + b, n + 1
+    if n:
+        counts.append(n)
+    return counts
+
+
+def balance(
+    costs: list[float], mems: list[int], pp_size: int, mem_cap: float
+) -> Partition:
+    """Minimise the cost of the most expensive contiguous stage.
+
+    Binary searches the bottleneck cost. Monotone in x because raising the
+    budget can only push cuts later, never earlier.
+    """
+    if not feasible(float("inf"), costs, mems, pp_size, mem_cap):
+        # Memory alone rules out every budget; say so rather than return hi.
+        return Partition(memory_infeasible=True)
+
+    lo, hi = max(costs), sum(costs)
+    for _ in range(100):  # ~1e-30 relative precision, ample for ms-scale costs
+        mid = (lo + hi) / 2
+        if feasible(mid, costs, mems, pp_size, mem_cap):
+            hi = mid
+        else:
+            lo = mid
+
+    counts = cut_points(hi, costs, mems, mem_cap)
+    idx, worst_t, worst_m = 0, 0.0, 0
+    for n in counts:
+        worst_t = max(worst_t, sum(costs[idx:idx + n]))
+        worst_m = max(worst_m, sum(mems[idx:idx + n]))
+        idx += n
+    return Partition(counts, worst_t, worst_m, False)
