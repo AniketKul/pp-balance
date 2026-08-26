@@ -410,7 +410,7 @@ def balance(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_partitioner.py -v`
-Expected: 16 passed
+Expected: 15 passed
 
 - [ ] **Step 5: Commit**
 
@@ -475,7 +475,7 @@ def evaluate_split(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_partitioner.py -v`
-Expected: 18 passed
+Expected: 17 passed
 
 - [ ] **Step 5: Commit**
 
@@ -644,6 +644,15 @@ Run: `uv run pytest tests/test_profiler.py -v -m gpu`
 Expected: FAIL with `ModuleNotFoundError: No module named 'pp_balance.profiler'`
 
 - [ ] **Step 3: Write the implementation**
+
+**Verified on this machine (2026-08-26), do not remove:** `VLLM_ENABLE_V1_MULTIPROCESSING=0`
+is REQUIRED. Without it vLLM 0.19.1 runs the engine core in a separate process and
+`llm.apply_model(func)` raises `TypeError: Object of type <class 'function'> is not
+serializable`, because the function cannot cross the process boundary. Setting it at module
+scope — before `vllm` is imported inside `profile_model` — is what makes the hook-install and
+drain calls work. A smoke test with it set returned `n_layers=52` and layer types
+`{NemotronHMambaDecoderLayer: 24, NemotronHMLPDecoderLayer: 24, NemotronHAttentionDecoderLayer: 4}`,
+confirming both the attribute path and the architecture mix.
 
 Create `src/pp_balance/profiler.py`:
 
