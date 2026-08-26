@@ -1,4 +1,5 @@
 """Measure per-layer latency inside vLLM's own runtime."""
+import gc
 import os
 import statistics
 from dataclasses import dataclass, field
@@ -85,20 +86,52 @@ def _median_iqr(samples: list[list[float]]) -> tuple[list[float], list[float]]:
     return med, iqr
 
 
+def _release() -> None:
+    """Tear down vLLM's engine so a second model can load in this process.
+
+    Each `profile_model` call claims `gpu_memory_utilization` of the device and
+    vLLM keeps process-global distributed state, so dropping the Python
+    reference alone is not enough. Without this, a second call in the same
+    process fails with "Free memory on device cuda:0 ... is less than desired
+    GPU memory utilization" — exactly what happens when the profiler test and
+    the control test run in one pytest session.
+
+    Call this only AFTER the last reference to the `LLM` has been deleted.
+    """
+    try:
+        from vllm.distributed.parallel_state import (
+            destroy_distributed_environment,
+            destroy_model_parallel,
+        )
+        destroy_model_parallel()
+        destroy_distributed_environment()
+    except Exception:  # teardown is best-effort; never mask a real result
+        pass
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
 def profile_model(
     model_id: str,
     prompt_tokens: int = 4096,
     decode_steps: int = 8,
     repeats: int = 5,
     max_model_len: int | None = None,
+    gpu_memory_utilization: float = 0.85,
 ) -> ProfileResult:
-    """Load through vLLM, drive real requests, return per-layer medians."""
+    """Load through vLLM, drive real requests, return per-layer medians.
+
+    `gpu_memory_utilization` defaults to 0.85 for real measurement runs. Tests
+    that profile more than one model in a single process must lower it: vLLM's
+    engine does not fully release device memory on teardown, so two engines
+    have to fit side by side.
+    """
     from vllm import LLM, SamplingParams
 
     llm = LLM(
         model=model_id,
         max_model_len=max_model_len or (prompt_tokens + decode_steps + 64),
-        gpu_memory_utilization=0.85,
+        gpu_memory_utilization=gpu_memory_utilization,
         enforce_eager=True,  # CUDA graphs would swallow per-layer boundaries
         # Force the prompt through in ONE forward. Without this vLLM chunks
         # prefill, and "the first call per layer is the prefill" — which the
@@ -155,6 +188,9 @@ def profile_model(
 
     p_med, p_iqr = _median_iqr(prefill_s)
     d_med, d_iqr = _median_iqr(decode_s)
-    return ProfileResult(model_id, n_layers, p_med, d_med, p_iqr, d_iqr,
-                         model_fwd_ms=statistics.median(top_s),
-                         end_to_end_ms=statistics.median(e2e))
+    result = ProfileResult(model_id, n_layers, p_med, d_med, p_iqr, d_iqr,
+                           model_fwd_ms=statistics.median(top_s),
+                           end_to_end_ms=statistics.median(e2e))
+    del llm
+    _release()
+    return result

@@ -4,7 +4,8 @@ from pp_balance.profiler import profile_model
 @pytest.mark.gpu
 def test_profile_model_measures_every_layer_in_both_regimes():
     result = profile_model(
-        "Qwen/Qwen3-8B", prompt_tokens=512, decode_steps=4, repeats=3
+        "Qwen/Qwen3-8B", prompt_tokens=512, decode_steps=4, repeats=3,
+        gpu_memory_utilization=0.30,
     )
     n = result.n_layers
     assert n == 36  # Qwen3-8B has 36 hidden layers
