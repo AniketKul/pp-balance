@@ -612,29 +612,29 @@ Hooks are installed and drained inside the worker via `apply_model`, returning p
 
 - [ ] **Step 1: Write the failing test**
 
-Uses `Qwen/Qwen3-0.6B` (already cached) so the GPU test runs in well under a minute.
+Uses `Qwen/Qwen3-8B` (already cached, 36 hidden layers). This is the same control
+model as Task 11, so no extra checkpoint is needed. Both properties are asserted from a
+single `profile_model` call rather than two, because loading a 16 GB model twice to check
+two facts about the same run is waste, not extra coverage.
 
 ```python
 import pytest
 from pp_balance.profiler import profile_model
 
 @pytest.mark.gpu
-def test_profile_model_returns_one_median_per_layer():
+def test_profile_model_measures_every_layer_in_both_regimes():
     result = profile_model(
-        "Qwen/Qwen3-0.6B", prompt_tokens=256, decode_steps=4, repeats=3
+        "Qwen/Qwen3-8B", prompt_tokens=512, decode_steps=4, repeats=3
     )
     n = result.n_layers
-    assert n == 28  # Qwen3-0.6B has 28 hidden layers
+    assert n == 36  # Qwen3-8B has 36 hidden layers
     assert len(result.prefill_ms) == n
     assert len(result.decode_ms) == n
-    assert all(t > 0 for t in result.prefill_ms)
     assert len(result.prefill_iqr) == n
-
-@pytest.mark.gpu
-def test_prefill_is_slower_than_decode_per_layer():
-    result = profile_model(
-        "Qwen/Qwen3-0.6B", prompt_tokens=512, decode_steps=4, repeats=3
-    )
+    assert all(t > 0 for t in result.prefill_ms)
+    assert all(t > 0 for t in result.decode_ms)
+    # A prefill forward processes the whole prompt; a decode step processes one
+    # token. Per layer, prefill must cost strictly more.
     assert sum(result.prefill_ms) > sum(result.decode_ms)
 ```
 
@@ -773,7 +773,7 @@ def profile_model(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_profiler.py -v -m gpu`
-Expected: 2 passed. If the layer count assertion fails, print `result.n_layers` and correct the expected value against the model's real `num_hidden_layers` — do not loosen the assertion to make it pass.
+Expected: 1 passed. If the layer count assertion fails, print `result.n_layers` and correct the expected value against the model's real `num_hidden_layers` — do not loosen the assertion to make it pass.
 
 - [ ] **Step 5: Commit**
 
