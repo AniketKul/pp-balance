@@ -670,6 +670,7 @@ from pp_balance.model_access import find_layers
 os.environ.setdefault("VLLM_ENABLE_V1_MULTIPROCESSING", "0")
 
 _ATTR = "_ppbalance_records"
+TOP = "TOP"  # key for the whole-model forward
 
 
 @dataclass
@@ -680,38 +681,52 @@ class ProfileResult:
     decode_ms: list[float] = field(default_factory=list)
     prefill_iqr: list[float] = field(default_factory=list)
     decode_iqr: list[float] = field(default_factory=list)
+    model_fwd_ms: float = 0.0   # top-level model forward, prefill (denominator)
+    end_to_end_ms: float = 0.0  # whole generate() call, informational only
 
 
 def install_hooks(model):
-    """Attach CUDA-event pairs to every decoder layer. Runs in the worker."""
+    """Attach CUDA-event pairs to every decoder layer, plus the whole model.
+
+    The `"TOP"` entry times the top-level model forward and is the denominator
+    for the reconstruction check. VERIFIED: a hook on the model *body*
+    (`model.model`) never fires under vLLM's runtime, so it cannot be used;
+    a hook on the top-level module does.
+    """
     parts = find_layers(model)
-    setattr(model, _ATTR, {i: [] for i in range(len(parts.layers))})
+    keys = list(range(len(parts.layers))) + [TOP]
+    setattr(model, _ATTR, {k: [] for k in keys})
     records = getattr(model, _ATTR)
 
-    for idx, layer in enumerate(parts.layers):
-        def pre(mod, args, idx=idx):
+    def attach(module, key):
+        def pre(mod, args):
             start = torch.cuda.Event(enable_timing=True)
             start.record()
             mod._ppb_start = start
 
-        def post(mod, args, out, idx=idx, records=records):
+        def post(mod, args, out, key=key):
             end = torch.cuda.Event(enable_timing=True)
             end.record()
-            records[idx].append((mod._ppb_start, end))
+            # Index the dict at call time so drain_timings can safely rebind.
+            records[key].append((mod._ppb_start, end))
             return out
 
-        layer.register_forward_pre_hook(pre)
-        layer.register_forward_hook(post)
+        module.register_forward_pre_hook(pre)
+        module.register_forward_hook(post)
+
+    for idx, layer in enumerate(parts.layers):
+        attach(layer, idx)
+    attach(model, TOP)
     return len(parts.layers)
 
 
-def drain_timings(model) -> dict[int, list[float]]:
+def drain_timings(model) -> dict:
     """Synchronise, convert events to milliseconds, and clear. In-worker."""
     torch.cuda.synchronize()
     records = getattr(model, _ATTR)
-    out = {i: [s.elapsed_time(e) for s, e in evs] for i, evs in records.items()}
-    for i in records:
-        records[i] = []
+    out = {k: [s.elapsed_time(e) for s, e in evs] for k, evs in records.items()}
+    for k in records:
+        records[k] = []
     return out
 
 
@@ -748,6 +763,10 @@ def profile_model(
         # prefill, and "the first call per layer is the prefill" — which the
         # loop below relies on — silently becomes false.
         max_num_batched_tokens=prompt_tokens + decode_steps + 64,
+        # VERIFIED REQUIRED: with prefix caching on (the default), the warmup
+        # call populates the cache and every measured repeat of the same prompt
+        # skips prefill entirely, recording ZERO prefill samples per layer.
+        enable_prefix_caching=False,
     )
     n_layers = llm.apply_model(install_hooks)[0]
 
@@ -763,20 +782,41 @@ def profile_model(
     llm.generate([prompt], SamplingParams(max_tokens=decode_steps))
     llm.apply_model(drain_timings)
 
+    top_s: list[float] = []
+    e2e: list[float] = []
     for _ in range(repeats):
+        torch.cuda.synchronize()
+        t0 = torch.cuda.Event(enable_timing=True)
+        t1 = torch.cuda.Event(enable_timing=True)
+        t0.record()
         llm.generate([prompt], SamplingParams(max_tokens=decode_steps,
                                               ignore_eos=True))
+        t1.record()
+        torch.cuda.synchronize()
+        e2e.append(t0.elapsed_time(t1))
+
         timings = llm.apply_model(drain_timings)[0]
-        for idx, series in timings.items():
-            # First call per layer is the prefill forward; the rest are decodes.
+        for key, series in timings.items():
             if not series:
                 continue
-            prefill_s[idx].append(series[0])
-            decode_s[idx].extend(series[1:])
+            if key == TOP:
+                top_s.append(series[0])  # prefill forward of the whole model
+                continue
+            # First call per layer is the prefill forward; the rest are decodes.
+            prefill_s[key].append(series[0])
+            decode_s[key].extend(series[1:])
+
+    if not top_s or any(not v for v in prefill_s):
+        raise RuntimeError(
+            "no prefill samples recorded — check that prefix caching is "
+            "disabled and that hooks are attached to the executing model"
+        )
 
     p_med, p_iqr = _median_iqr(prefill_s)
     d_med, d_iqr = _median_iqr(decode_s)
-    return ProfileResult(model_id, n_layers, p_med, d_med, p_iqr, d_iqr)
+    return ProfileResult(model_id, n_layers, p_med, d_med, p_iqr, d_iqr,
+                         model_fwd_ms=statistics.median(top_s),
+                         end_to_end_ms=statistics.median(e2e))
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -808,15 +848,15 @@ import pytest
 from pp_balance.validate import reconstruction_error, check_reconstruction
 
 def test_reconstruction_error_is_relative():
-    assert reconstruction_error(per_layer_sum=95.0, end_to_end=100.0) == \
+    assert reconstruction_error(per_layer_sum=95.0, model_fwd=100.0) == \
         pytest.approx(0.05)
 
 def test_check_passes_within_ten_percent():
-    check_reconstruction(per_layer_sum=95.0, end_to_end=100.0)  # no raise
+    check_reconstruction(per_layer_sum=95.0, model_fwd=100.0)  # no raise
 
 def test_check_raises_beyond_ten_percent():
     with pytest.raises(ValueError, match="reconstruction"):
-        check_reconstruction(per_layer_sum=50.0, end_to_end=100.0)
+        check_reconstruction(per_layer_sum=50.0, model_fwd=100.0)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -834,18 +874,26 @@ Create `src/pp_balance/validate.py`:
 RECONSTRUCTION_TOLERANCE = 0.10  # spec: within 10%
 
 
-def reconstruction_error(per_layer_sum: float, end_to_end: float) -> float:
-    """Relative gap between summed per-layer times and the whole forward."""
-    return abs(per_layer_sum - end_to_end) / end_to_end
+def reconstruction_error(per_layer_sum: float, model_fwd: float) -> float:
+    """Relative gap between summed per-layer times and the model forward."""
+    return abs(per_layer_sum - model_fwd) / model_fwd
 
 
-def check_reconstruction(per_layer_sum: float, end_to_end: float) -> None:
-    """Raise unless per-layer timings account for the whole forward pass."""
-    err = reconstruction_error(per_layer_sum, end_to_end)
+def check_reconstruction(per_layer_sum: float, model_fwd: float) -> None:
+    """Raise unless per-layer timings account for the whole model forward.
+
+    The denominator is the TOP-LEVEL MODEL FORWARD, not the wall time of
+    `generate()`. Measured on Nemotron-H-8B at 4K context, summed per-layer
+    time is 99.8% of the model forward but only 65.1% of the `generate()`
+    call, because that call also carries scheduling, sampling and
+    detokenisation. Comparing against `generate()` would fail this check on
+    every healthy run.
+    """
+    err = reconstruction_error(per_layer_sum, model_fwd)
     if err > RECONSTRUCTION_TOLERANCE:
         raise ValueError(
             f"reconstruction check failed: per-layer sum {per_layer_sum:.2f}ms "
-            f"vs end-to-end {end_to_end:.2f}ms ({err:.1%} off, tolerance "
+            f"vs model forward {model_fwd:.2f}ms ({err:.1%} off, tolerance "
             f"{RECONSTRUCTION_TOLERANCE:.0%}). Hook overhead or missed work — "
             "all downstream numbers are void."
         )
@@ -856,42 +904,19 @@ def check_reconstruction(per_layer_sum: float, end_to_end: float) -> None:
 Run: `uv run pytest tests/test_validate.py -v`
 Expected: 3 passed
 
-- [ ] **Step 5: Wire it into the profiler**
+- [ ] **Step 5: Confirm the profiler already reports the denominator**
 
-In `src/pp_balance/profiler.py`, add `end_to_end_ms` to `ProfileResult`:
+`ProfileResult` gained `model_fwd_ms` and `end_to_end_ms` in Task 7, and
+`profile_model` already populates both. No profiler changes are needed here.
+Verify with:
 
-```python
-    end_to_end_ms: float = 0.0
-```
-
-and inside `profile_model`, time the whole generate call and record it. Replace the measurement loop body's `llm.generate(...)` line for the repeats loop with:
-
-```python
-    e2e: list[float] = []
-    for _ in range(repeats):
-        torch.cuda.synchronize()
-        t0 = torch.cuda.Event(enable_timing=True)
-        t1 = torch.cuda.Event(enable_timing=True)
-        t0.record()
-        llm.generate([prompt], SamplingParams(max_tokens=decode_steps,
-                                              ignore_eos=True))
-        t1.record()
-        torch.cuda.synchronize()
-        e2e.append(t0.elapsed_time(t1))
-        timings = llm.apply_model(drain_timings)[0]
-        for idx, series in timings.items():
-            if not series:
-                continue
-            prefill_s[idx].append(series[0])
-            decode_s[idx].extend(series[1:])
-```
-
-and set `end_to_end_ms=statistics.median(e2e)` on the returned `ProfileResult`.
+Run: `uv run python -c "from pp_balance.profiler import ProfileResult; print(ProfileResult('x',1).model_fwd_ms)"`
+Expected: `0.0` (the default), confirming the field exists.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/pp_balance/validate.py tests/test_validate.py src/pp_balance/profiler.py
+git add src/pp_balance/validate.py tests/test_validate.py
 git commit -m "feat: reconstruction check gating reported measurements"
 ```
 
@@ -1109,8 +1134,7 @@ from pp_balance.validate import check_reconstruction
 def test_qwen3_8b_control_shows_no_material_gap():
     res = profile_model("Qwen/Qwen3-8B", prompt_tokens=2048,
                         decode_steps=8, repeats=5)
-    check_reconstruction(sum(res.prefill_ms) + sum(res.decode_ms),
-                         res.end_to_end_ms)
+    check_reconstruction(sum(res.prefill_ms), res.model_fwd_ms)
     costs = res.prefill_ms
     row = compare(costs, [0] * len(costs), pp_size=4, mem_cap=float("inf"))
     assert row.reduction_pct < 2.0, (
@@ -1122,7 +1146,7 @@ def test_qwen3_8b_control_shows_no_material_gap():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_control.py -v -m gpu`
-Expected: FAIL — `ProfileResult` has no `end_to_end_ms` until Task 8 Step 5 is done, or the model has not been exercised yet. Fix forward; do not weaken the 2% threshold.
+Expected: FAIL — `pp_balance.validate` does not exist until Task 8 is done. Fix forward; do not weaken the 2% threshold.
 
 - [ ] **Step 3: Write the runner script**
 
@@ -1144,14 +1168,13 @@ def main():
     ap.add_argument("--prompt-tokens", type=int, default=4096)
     ap.add_argument("--decode-steps", type=int, default=8)
     ap.add_argument("--repeats", type=int, default=5)
-    ap.add_argument("--pp-sizes", type=int, nargs="+", default=[2, 4, 8])
+    ap.add_argument("--pp-sizes", type=int, nargs="+", default=[2, 4, 8, 16])
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     res = profile_model(args.model, args.prompt_tokens,
                         args.decode_steps, args.repeats)
-    check_reconstruction(sum(res.prefill_ms) + sum(res.decode_ms),
-                         res.end_to_end_ms)
+    check_reconstruction(sum(res.prefill_ms), res.model_fwd_ms)
 
     rows = []
     for regime, costs in (("prefill", res.prefill_ms),
@@ -1210,11 +1233,11 @@ mkdir -p results
 M=nvidia/Nemotron-H-8B-Base-8K
 for ctx in 1024 4096 8000; do
   uv run python scripts/run_model.py "$M" \
-      --prompt-tokens "$ctx" --pp-sizes 2 4 8 \
+      --prompt-tokens "$ctx" --pp-sizes 2 4 8 16 \
       --out "results/nemotron-h-8b-${ctx}.json"
 done
 uv run python scripts/run_model.py Qwen/Qwen3-8B \
-    --prompt-tokens 4096 --pp-sizes 2 4 8 \
+    --prompt-tokens 4096 --pp-sizes 2 4 8 16 \
     --out results/qwen3-8b-4096.json
 ```
 
