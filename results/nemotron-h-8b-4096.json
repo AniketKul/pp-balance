@@ -1,0 +1,238 @@
+{
+  "model": "nvidia/Nemotron-H-8B-Base-8K",
+  "ctx": 4096,
+  "rows": [
+    {
+      "regime": "prefill",
+      "pp_size": 2,
+      "even_counts": [
+        26,
+        26
+      ],
+      "even_max_cost": 84.31631982326508,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        26,
+        26
+      ],
+      "balanced_max_cost": 84.31631982326508,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.0,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "prefill",
+      "pp_size": 4,
+      "even_counts": [
+        13,
+        13,
+        13,
+        13
+      ],
+      "even_max_cost": 42.30127954483032,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        13,
+        13,
+        13,
+        13
+      ],
+      "balanced_max_cost": 42.30127954483032,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.0,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "prefill",
+      "pp_size": 8,
+      "even_counts": [
+        6,
+        6,
+        6,
+        7,
+        7,
+        7,
+        7,
+        6
+      ],
+      "even_max_cost": 23.591488122940063,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        6,
+        7,
+        7,
+        6,
+        7,
+        6,
+        7,
+        6
+      ],
+      "balanced_max_cost": 21.745599508285522,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 7.824383968638343,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "prefill",
+      "pp_size": 16,
+      "even_counts": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        4,
+        4,
+        4,
+        4,
+        3
+      ],
+      "even_max_cost": 13.707327842712402,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        3,
+        3,
+        4,
+        3,
+        3,
+        4,
+        3,
+        3,
+        4,
+        3,
+        3,
+        3,
+        4,
+        3,
+        3,
+        3
+      ],
+      "balanced_max_cost": 11.767807722091675,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 14.149512894680543,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 2,
+      "even_counts": [
+        26,
+        26
+      ],
+      "even_max_cost": 14.042048037052155,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        26,
+        26
+      ],
+      "balanced_max_cost": 14.042048037052155,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.0,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 4,
+      "even_counts": [
+        13,
+        13,
+        13,
+        13
+      ],
+      "even_max_cost": 7.16431999206543,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        13,
+        13,
+        13,
+        13
+      ],
+      "balanced_max_cost": 7.16431999206543,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.0,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 8,
+      "even_counts": [
+        6,
+        6,
+        6,
+        7,
+        7,
+        7,
+        7,
+        6
+      ],
+      "even_max_cost": 3.6753920018672943,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        6,
+        6,
+        7,
+        7,
+        6,
+        7,
+        6,
+        7
+      ],
+      "balanced_max_cost": 3.6712959706783295,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.11144474349630848,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 16,
+      "even_counts": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        4,
+        4,
+        4,
+        4,
+        3
+      ],
+      "even_max_cost": 2.2780160009860992,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        4,
+        3,
+        4,
+        4,
+        4,
+        3,
+        4,
+        3,
+        3,
+        2
+      ],
+      "balanced_max_cost": 2.123807966709137,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 6.769400838721469,
+      "memory_infeasible": false
+    }
+  ]
+}

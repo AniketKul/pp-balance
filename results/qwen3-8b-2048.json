@@ -1,0 +1,238 @@
+{
+  "model": "Qwen/Qwen3-8B",
+  "ctx": 2048,
+  "rows": [
+    {
+      "regime": "prefill",
+      "pp_size": 2,
+      "even_counts": [
+        18,
+        18
+      ],
+      "even_max_cost": 35.99398398399353,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        19,
+        17
+      ],
+      "balanced_max_cost": 35.583264231681824,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 1.1410788883340977,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "prefill",
+      "pp_size": 4,
+      "even_counts": [
+        9,
+        9,
+        9,
+        9
+      ],
+      "even_max_cost": 18.303776025772095,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        9,
+        9,
+        9,
+        9
+      ],
+      "balanced_max_cost": 18.303776025772095,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.0,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "prefill",
+      "pp_size": 8,
+      "even_counts": [
+        4,
+        4,
+        4,
+        5,
+        5,
+        5,
+        5,
+        4
+      ],
+      "even_max_cost": 10.16262412071228,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        5,
+        5,
+        5,
+        5,
+        4,
+        4,
+        4,
+        4
+      ],
+      "balanced_max_cost": 9.589920043945312,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 5.635395641562191,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "prefill",
+      "pp_size": 16,
+      "even_counts": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        2
+      ],
+      "even_max_cost": 6.10431981086731,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        2,
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "balanced_max_cost": 5.556064128875732,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 8.981437719163019,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 2,
+      "even_counts": [
+        18,
+        18
+      ],
+      "even_max_cost": 11.113055944442749,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        18,
+        18
+      ],
+      "balanced_max_cost": 11.113055944442749,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.0,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 4,
+      "even_counts": [
+        9,
+        9,
+        9,
+        9
+      ],
+      "even_max_cost": 5.673279941082001,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        9,
+        9,
+        9,
+        9
+      ],
+      "balanced_max_cost": 5.673279941082001,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 0.0,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 8,
+      "even_counts": [
+        4,
+        4,
+        4,
+        5,
+        5,
+        5,
+        5,
+        4
+      ],
+      "even_max_cost": 3.117248058319092,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        4,
+        5,
+        5,
+        5,
+        5,
+        4,
+        4,
+        4
+      ],
+      "balanced_max_cost": 3.043456017971039,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 2.3672174612835826,
+      "memory_infeasible": false
+    },
+    {
+      "regime": "decode",
+      "pp_size": 16,
+      "even_counts": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        2
+      ],
+      "even_max_cost": 1.8826560378074646,
+      "even_max_bytes": 0,
+      "balanced_counts": [
+        2,
+        2,
+        3,
+        2,
+        3,
+        3,
+        2,
+        2,
+        3,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "balanced_max_cost": 1.8130239844322205,
+      "balanced_max_bytes": 0,
+      "reduction_pct": 3.698607285499555,
+      "memory_infeasible": false
+    }
+  ]
+}

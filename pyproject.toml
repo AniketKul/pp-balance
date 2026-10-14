@@ -1,0 +1,20 @@
+[project]
+name = "pp-balance"
+version = "0.1.0"
+requires-python = ">=3.10"
+# vllm is pinned to 0.19.1: it is the newest release whose torch pin (2.10.0)
+# ships CUDA 12.8 runtime wheels. Newer vllm (>=0.27.0) pins torch>=2.11.0,
+# which defaults to CUDA 13 wheels that the installed NVIDIA driver
+# (570.211.01, max CUDA 12.8) cannot run.
+dependencies = ["vllm==0.19.1", "pytest"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gpu: requires a GPU and a downloaded model"]
